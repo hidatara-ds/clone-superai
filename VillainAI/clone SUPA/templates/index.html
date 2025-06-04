@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenRouter Chat</title>
+</head>
+<body>
+    <h2>Chat with OpenRouter Model</h2>
+    <form method="POST">
+        <label>Prompt:</label><br>
+        <textarea name="prompt" rows="4" cols="50" placeholder="Tulis sesuatu..."></textarea><br><br>
+
+        <label>Select Model:</label><br>
+        <select name="model">
+            {% for model in models %}
+            <option value="{{ model }}">{{ model }}</option>
+            {% endfor %}
+        </select><br><br>
+
+        <button type="submit">Kirim</button>
+    </form>
+
+    {% if response %}
+        <h3>Jawaban Model:</h3>
+        <p>{{ response }}</p>
+    {% endif %}
+</body>
+</html>
