@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot MVP - OpenRouter</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>AI Chatbot MVP (OpenRouter)</h1>
+        <form id="chat-form">
+            <div class="prompt-container">
+                <textarea id="prompt" name="prompt" placeholder="Tulis pertanyaan atau perintah Anda di sini..."></textarea>
+            </div>
+            <div class="model-dropdown">
+                <button type="button" class="dropdown-btn" id="dropdownBtn">Pilih Model</button>
+                <div id="model-dropdown" class="dropdown-content">
+                    {% for model_id, model in models.items() %}
+                    <div class="model-option {% if model_id == 'auto' %}selected{% endif %}" data-model-id="{{ model_id }}">
+                        <div class="model-name">{{ model.name }}</div>
+                        <div class="model-desc">{{ model.description }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <input type="hidden" name="model_id" id="selectedModel" value="auto">
+            </div>
+            <div class="actions">
+                <button type="submit" class="submit-btn">Kirim</button>
+            </div>
+        </form>
+        <div class="response-container" id="responseContainer" style="display:none;">
+            <div class="response-model" id="responseModel"></div>
+            <div class="response-content" id="responseContent"></div>
+            <div class="response-meta" id="responseMeta"></div>
+        </div>
+    </div>
+    <script>
+    // Dropdown logic
+    const dropdownBtn = document.getElementById('dropdownBtn');
+    const dropdownContent = document.getElementById('model-dropdown');
+    const modelOptions = document.getElementsByClassName('model-option');
+    const selectedModelInput = document.getElementById('selectedModel');
+    dropdownBtn.onclick = function() {
+        dropdownContent.classList.toggle('show');
+    };
+    Array.from(modelOptions).forEach(option => {
+        option.onclick = function() {
+            Array.from(modelOptions).forEach(opt => opt.classList.remove('selected'));
+            this.classList.add('selected');
+            selectedModelInput.value = this.getAttribute('data-model-id');
+            dropdownContent.classList.remove('show');
+            dropdownBtn.textContent = this.querySelector('.model-name').textContent;
+        };
+    });
+    // AJAX submit
+    document.getElementById('chat-form').onsubmit = async function(e) {
+        e.preventDefault();
+        const prompt = document.getElementById('prompt').value;
+        const model_id = document.getElementById('selectedModel').value;
+        const responseContainer = document.getElementById('responseContainer');
+        const responseModel = document.getElementById('responseModel');
+        const responseContent = document.getElementById('responseContent');
+        const responseMeta = document.getElementById('responseMeta');
+        responseContainer.style.display = 'none';
+        responseContent.textContent = 'Loading...';
+        try {
+            const formData = new FormData();
+            formData.append('prompt', prompt);
+            formData.append('model_id', model_id);
+            const res = await fetch('/submit', {method: 'POST', body: formData});
+            const data = await res.json();
+            if (data.status === 'success') {
+                responseModel.textContent = data.model_used;
+                responseContent.innerHTML = data.response.replace(/\n/g, '<br>');
+                let metaInfo = '';
+                if (data.auto_selected) {
+                    metaInfo += `<div>Terpilih otomatis (${data.pricing_tier || 'N/A'})</div>`;
+                } else {
+                    metaInfo += `<div>Tier: ${data.pricing_tier || 'N/A'}</div>`;
+                }
+                responseMeta.innerHTML = metaInfo;
+                responseContainer.style.display = 'block';
+            } else {
+                responseContent.textContent = data.error || 'Terjadi error.';
+                responseContainer.style.display = 'block';
+            }
+        } catch (err) {
+            responseContent.textContent = 'Terjadi error koneksi.';
+            responseContainer.style.display = 'block';
+        }
+    };
+    </script>
+</body>
+</html>

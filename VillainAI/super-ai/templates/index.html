@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Bot</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 70vh;
+        }
+        .model-selector {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .ai-message {
+            background-color: #e9ecef;
+            color: #333;
+            align-self: flex-start;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        .chat-input button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .chat-input button:hover {
+            background-color: #0069d9;
+        }
+        .chat-input button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .model-info {
+            font-size: 12px;
+            color: #6c757d;
+            text-align: right;
+            margin-top: 5px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Chat Bot</h1>
+        <div class="chat-container" style="max-width:600px;margin:auto;">
+            <h2>AI Chat</h2>
+            <div id="chat-box" style="border:1px solid #ccc;min-height:200px;padding:10px;margin-bottom:10px;background:#fafafa;">
+                {% if chat_history %}
+                {% for chat in chat_history %}
+                <div>
+                    <b>{{ chat.role|capitalize }}:</b> {{ chat.content }}
+                </div>
+                {% endfor %}
+                {% else %}
+                <div style="color:#888;">Belum ada percakapan. Mulai chat di bawah!</div>
+                {% endif %}
+            </div>
+            <form method="post" action="/api/chat">
+                <select name="provider_model">
+                {% for model in models %}
+                <option value="{{ model.provider }}|{{ model.model }}">{{ model.display_name }}</option>
+                {% endfor %}
+                </select>
+                <input type="text" name="message" placeholder="Ketik pesan..." style="width:60%;" required>
+                <button type="submit">Kirim</button>
+            </form>
+        </div>
+            <div class="model-selector">
+                <select id="model-select">
+                    {% for model in models %}
+                    <option value="{{ model.provider }}|{{ model.model }}">{{ model.display_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type your message here..." />
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            const modelSelect = document.getElementById('model-select');
+            
+            // Tambahkan indikator "AI sedang mengetik..."
+            function addTypingIndicator() {
+                const typingDiv = document.createElement('div');
+                typingDiv.classList.add('message', 'ai-message', 'typing-indicator');
+                typingDiv.innerHTML = '<span></span><span></span><span></span>';
+                typingDiv.id = 'typing-indicator';
+                chatMessages.appendChild(typingDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            
+            function removeTypingIndicator() {
+                const typingIndicator = document.getElementById('typing-indicator');
+                if (typingIndicator) {
+                    typingIndicator.remove();
+                }
+            }
+            
+            // Function to add a message to the chat
+            function addMessage(content, isUser = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message');
+                messageDiv.classList.add(isUser ? 'user-message' : 'ai-message');
+                messageDiv.textContent = content;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            
+            // Function to send a message to the API
+            async function sendMessage() {
+                const message = messageInput.value.trim();
+                if (!message) return;
+                
+                // Clear input
+                messageInput.value = '';
+                
+                // Add user message to chat
+                addMessage(message, true);
+                
+                // Disable send button and show loading
+                sendButton.disabled = true;
+                const loadingSpan = document.createElement('span');
+                loadingSpan.classList.add('loading');
+                sendButton.appendChild(loadingSpan);
+                
+                // Tampilkan indikator "AI sedang mengetik..."
+                addTypingIndicator();
+                
+                // Get selected model
+                const [provider, model] = modelSelect.value.split('|');
+                
+                try {
+                    // Send request to API
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            provider: provider,
+                            model: model
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    // Hapus indikator mengetik
+                    removeTypingIndicator();
+                    
+                    if (response.ok) {
+                        // Add AI response to chat
+                        addMessage(data.response);
+                        
+                        // Add model info
+                        const modelInfo = document.createElement('div');
+                        modelInfo.classList.add('model-info');
+                        modelInfo.textContent = `Model: ${data.provider} - ${data.model}`;
+                        chatMessages.appendChild(modelInfo);
+                    } else {
+                        // Add error message
+                        addMessage(`Error: ${data.error || 'Unknown error'}`);
+                    }
+                } catch (error) {
+                    // Hapus indikator mengetik
+                    removeTypingIndicator();
+                    
+                    // Add error message
+                    addMessage(`Error: ${error.message}`);
+                } finally {
+                    // Re-enable send button and remove loading
+                    sendButton.disabled = false;
+                    sendButton.removeChild(loadingSpan);
+                }
+            }
+            
+            // Event listeners
+            sendButton.addEventListener('click', sendMessage);
+            
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+
+    <style>
+        /* Tambahkan style untuk indikator mengetik */
+        .typing-indicator {
+            background-color: #e9ecef;
+            display: flex;
+            padding: 15px;
+            width: auto;
+            max-width: 100px;
+        }
+        .typing-indicator span {
+            height: 10px;
+            width: 10px;
+            float: left;
+            margin: 0 1px;
+            background-color: #9E9EA1;
+            display: block;
+            border-radius: 50%;
+            opacity: 0.4;
+        }
+        .typing-indicator span:nth-of-type(1) {
+            animation: 1s blink infinite 0.3333s;
+        }
+        .typing-indicator span:nth-of-type(2) {
+            animation: 1s blink infinite 0.6666s;
+        }
+        .typing-indicator span:nth-of-type(3) {
+            animation: 1s blink infinite 0.9999s;
+        }
+        @keyframes blink {
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+</body>
+</html>
